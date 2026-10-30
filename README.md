@@ -66,9 +66,15 @@ reload/infer offline. They do not measure Nepali recognition accuracy.
 Serve `dist/` with the included Caddy configuration, which sets CSP and privacy
 headers, permits only GET/HEAD, and returns 404 for missing assets. No server-side
 speech processing is needed. Use HTTPS for service workers. `compose.yaml` runs
-the existing pinned Caddy image without root, with a read-only filesystem, dropped
+the capability-free Caddy 2.11.7 image without root, with a read-only filesystem, dropped
 capabilities and a 192 MB memory limit on the `apps_default` network. This service
 is isolated from the consolidated application compose project.
+
+Build the included Dockerfile (its base manifest is pinned). It removes Caddy's
+low-port file capability because this service listens on 8080. Set
+`CAPTIONS_CADDY_IMAGE` to the resulting Docker image ID; `pull_policy: never`
+prevents substituting a remote image. Ordinary official Caddy images cannot be
+used with the same capability restrictions without this adjustment.
 
 The release directory is immutable. Point `CAPTIONS_RELEASE` to the new directory,
 and retain the previous release for rollback. A future domain change should add

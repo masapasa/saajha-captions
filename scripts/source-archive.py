@@ -3,7 +3,7 @@ from pathlib import Path
 import tarfile
 
 root = Path(__file__).resolve().parents[1]
-names = ['README.md', 'LICENSE', '.gitignore', 'package.json', 'package-lock.json',
+names = ['README.md', 'LICENSE', '.gitignore', '.dockerignore', 'Dockerfile', 'package.json', 'package-lock.json',
          'model.json', 'model-lock.json', 'Caddyfile', 'compose.yaml', 'index.html',
          'vite.config.js', 'playwright.config.js']
 files = [root / name for name in names]

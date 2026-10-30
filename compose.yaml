@@ -1,7 +1,8 @@
 services:
   saajha-captions:
-    # Deployment script pins the already installed Caddy image by digest.
-    image: ${CAPTIONS_CADDY_IMAGE:?Set an immutable Caddy image digest}
+    # Build the capability-free Dockerfile and pin its resulting image ID.
+    image: ${CAPTIONS_CADDY_IMAGE:?Set the immutable rootless image ID}
+    pull_policy: never
     user: "1000:1000"
     command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
     volumes:
