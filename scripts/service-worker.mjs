@@ -35,6 +35,13 @@ self.addEventListener('fetch', event => {
   if (url.origin !== location.origin || request.method !== 'GET') return;
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).then(r => {
+      // Rebuild the small app shell after the user removes downloaded caches
+      // and later returns online. Model files still require explicit use.
+      if (r.ok && (url.pathname === '/' || SHELL.includes(url.pathname))) {
+        event.waitUntil(caches.open(APP).then(async cache => {
+          if (!(await cache.match('/index.html', { ignoreVary: true }))) await cache.addAll(SHELL);
+        }).catch(() => {}));
+      }
       // Do not cache arbitrary navigation paths or server error pages.
       return r;
     }).catch(async () => (await caches.match(url.pathname === '/' ? '/index.html' : url.pathname, { ignoreVary: true })) || Response.error()));

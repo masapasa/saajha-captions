@@ -72,6 +72,21 @@ test('real local speech recognition, reviewed UTF-8 export and offline inference
   await expect(page.locator('#status')).toContainText('Draft ready');
   expect((await page.locator('#caption-list textarea').evaluateAll(nodes => nodes.map(node => node.value))).join(' ').toLowerCase()).toContain('community');
   await context.setOffline(false);
+  // Removing caches must be reversible: a later online visit restores the shell.
+  await page.locator('.technical summary').click();
+  await page.locator('#clear-cache').click();
+  await expect(page.locator('#cache-status')).toContainText('caches removed');
+  expect(await page.evaluate(async () => (await caches.keys()).filter(n => n.startsWith('saajha-')))).toEqual([]);
+  await page.reload();
+  await expect(page.locator('#tool-title')).toBeVisible();
+  await page.locator('#audio-file').setInputFiles('tests/fixtures/lesson.wav');
+  await page.locator('#recording-language').selectOption('english');
+  await page.locator('#transcribe').click();
+  await expect(page.locator('#status')).toHaveText(/Draft ready|could not|ran out/, { timeout: 180000 });
+  await expect(page.locator('#status')).toContainText('Draft ready');
+  await page.locator('.technical summary').click();
+  await page.locator('#check-cache').click();
+  await expect(page.locator('#cache-status')).toContainText('Offline files are cached');
 });
 
 test('cancel releases worker and leaves a usable file picker', async ({ page }) => {
