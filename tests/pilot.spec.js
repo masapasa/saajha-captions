@@ -1,0 +1,89 @@
+import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+
+test('mobile language switch, private file selection and invalid audio handling', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.locator('#transcribe')).toBeDisabled();
+  await page.getByRole('button', { name: 'नेपाली', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ne');
+  await expect(page.locator('h1')).toContainText('हरेक शब्द');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/mobile-nepali.png', fullPage: true });
+  await page.getByRole('button', { name: 'English', exact: true }).click();
+  await page.locator('#audio-file').setInputFiles({ name: 'recording.mp4', mimeType: 'video/mp4', buffer: Buffer.from('no') });
+  await expect(page.locator('#status')).toContainText('Choose a WAV');
+  await page.locator('#audio-file').setInputFiles({ name: 'big.wav', mimeType: 'audio/wav', buffer: Buffer.alloc(20 * 1024 * 1024 + 1) });
+  await expect(page.locator('#status')).toContainText('too large');
+  await page.locator('#audio-file').setInputFiles({ name: 'broken.wav', mimeType: 'audio/wav', buffer: Buffer.from('not audio') });
+  await page.locator('#transcribe').click();
+  await expect(page.locator('#status')).toContainText('could not read', { timeout: 20000 });
+  await page.locator('#audio-file').setInputFiles('tests/fixtures/long.wav');
+  await page.locator('#transcribe').click();
+  await expect(page.locator('#status')).toContainText('no longer than 3 minutes');
+});
+
+test('real local speech recognition, reviewed UTF-8 export and offline inference under CSP', async ({ page, context, baseURL }) => {
+  const requests = [], errors = [];
+  context.on('request', request => requests.push({ url: request.url(), method: request.method() }));
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', msg => { if (msg.type() === 'error') console.log('browser:', msg.text()); });
+  await page.goto('/');
+  await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+  await page.screenshot({ path: 'test-results/desktop.png', fullPage: true });
+  // Loading the page must not trigger large model or runtime downloads.
+  await page.waitForTimeout(1000);
+  expect(requests.filter(r => /\/models\/.*\.onnx|\/wasm\//.test(r.url))).toEqual([]);
+  await page.locator('#audio-file').setInputFiles('tests/fixtures/lesson.wav');
+  await page.locator('#recording-language').selectOption('english');
+  await page.locator('#transcribe').click();
+  await expect(page.locator('#status')).toHaveText(/Draft ready|could not|ran out/, { timeout: 180000 });
+  await expect(page.locator('#status')).toContainText('Draft ready');
+  const draft = (await page.locator('#caption-list textarea').evaluateAll(nodes => nodes.map(node => node.value))).join(' ');
+  expect(draft.toLowerCase()).toContain('community');
+  expect(draft.toLowerCase()).toContain('learning');
+  await expect(page.locator('[data-format="srt"]')).toBeDisabled();
+  await page.locator('#caption-list textarea').first().fill('नमस्ते। Welcome to community learning.');
+  await page.locator('#reviewed').check();
+  const downloaded = page.waitForEvent('download');
+  await page.locator('[data-format="srt"]').click();
+  const file = await downloaded;
+  const content = await readFile(await file.path(), 'utf8');
+  expect(content).toContain('नमस्ते'); expect(content).toMatch(/00:00:/);
+  // Subsequent edits invalidate the acknowledgement and unsafe timings block export.
+  await page.locator('.end').first().fill('0');
+  await expect(page.locator('#reviewed')).not.toBeChecked();
+  await expect(page.locator('#validation')).toBeVisible();
+  await expect(page.locator('[data-format="srt"]')).toBeDisabled();
+  await page.screenshot({ path: 'test-results/editor.png', fullPage: true });
+  await page.locator('.technical summary').click();
+  await page.locator('#check-cache').click();
+  await expect(page.locator('#cache-status')).toContainText('Offline files are cached', { timeout: 10000 });
+  expect(requests.every(r => r.method === 'GET')).toBe(true);
+  expect(requests.every(r => new URL(r.url).origin === new URL(baseURL).origin)).toBe(true);
+  expect(errors).toEqual([]);
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.locator('#tool-title')).toBeVisible();
+  await page.locator('#audio-file').setInputFiles('tests/fixtures/lesson.wav');
+  await page.locator('#recording-language').selectOption('english');
+  await page.locator('#transcribe').click();
+  await expect(page.locator('#status')).toHaveText(/Draft ready|could not|ran out/, { timeout: 180000 });
+  await expect(page.locator('#status')).toContainText('Draft ready');
+  expect((await page.locator('#caption-list textarea').evaluateAll(nodes => nodes.map(node => node.value))).join(' ').toLowerCase()).toContain('community');
+  await context.setOffline(false);
+});
+
+test('cancel releases worker and leaves a usable file picker', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#audio-file').setInputFiles('tests/fixtures/lesson.wav');
+  await page.locator('#recording-language').selectOption('english');
+  await page.locator('#transcribe').click();
+  await page.locator('#cancel').click();
+  await expect(page.locator('#status')).toContainText('Cancelled');
+  await expect(page.locator('#audio-file')).toBeEnabled();
+  await expect(page.locator('#transcribe')).toBeEnabled();
+  await page.locator('#clear').click();
+  await expect(page.locator('#transcribe')).toBeDisabled();
+  await expect(page.locator('#file-name')).toBeEmpty();
+});

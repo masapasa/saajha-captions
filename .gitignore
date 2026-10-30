@@ -1,0 +1,9 @@
+/node_modules/
+/dist/
+/public/models/
+/public/wasm/
+/test-results/
+/playwright-report/
+/tests/fixtures/*.wav
+/.DS_Store
+/public/saajha-captions-source.tar.gz

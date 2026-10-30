@@ -1,0 +1,35 @@
+services:
+  saajha-captions:
+    # Deployment script pins the already installed Caddy image by digest.
+    image: ${CAPTIONS_CADDY_IMAGE:?Set an immutable Caddy image digest}
+    user: "1000:1000"
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    volumes:
+      - ${CAPTIONS_RELEASE:?Set the release directory}/dist:/srv:ro
+      - ${CAPTIONS_RELEASE}/Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      XDG_CONFIG_HOME: /tmp/caddy-config
+      XDG_DATA_HOME: /tmp/caddy-data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 192m
+    cpus: 0.5
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+    networks: [apps]
+networks:
+  apps:
+    external: true
+    name: apps_default
